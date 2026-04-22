@@ -1,0 +1,66 @@
+name: aibrd Gap Check
+
+on:
+  workflow_call:
+    inputs:
+      aibrd_dir:
+        description: 'Path to .aibrd folder'
+        required: false
+        default: '.aibrd'
+        type: string
+
+jobs:
+  gap-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check .aibrd exists
+        id: check
+        run: |
+          if [ -f "${{ inputs.aibrd_dir }}/registry.json" ]; then
+            echo "initialized=true" >> $GITHUB_OUTPUT
+          else
+            echo "initialized=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No .aibrd/registry.json found. Skipping gap check."
+          fi
+
+      - name: Get changed files
+        if: steps.check.outputs.initialized == 'true'
+        id: diff
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt
+          echo "Changed files:"
+          cat changed_files.txt
+
+      - name: Run gap analysis via GitHub Models
+        if: steps.check.outputs.initialized == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CONTEXT=$(cat ${{ inputs.aibrd_dir }}/index.md 2>/dev/null || echo "No index.md found")
+          CHANGED=$(cat changed_files.txt | head -30)
+
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://models.inference.ai.azure.com/chat/completions" \
+            -d "{
+              \"model\": \"gpt-4o-mini\",
+              \"messages\": [
+                {\"role\": \"system\", \"content\": \"You are a software auditor. Given requirements and changed files, identify requirements at risk of not being covered. Be concise. Use requirement IDs (BF-XXX, BR-XXX).\"},
+                {\"role\": \"user\", \"content\": \"REQUIREMENTS:\\n${CONTEXT}\\n\\nCHANGED FILES:\\n${CHANGED}\\n\\nWhich requirements may be impacted or uncovered by these changes?\"}
+              ],
+              \"max_tokens\": 500
+            }")
+
+          echo "### aibrd Gap Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'])" >> $GITHUB_STEP_SUMMARY || echo "Gap analysis completed." >> $GITHUB_STEP_SUMMARY

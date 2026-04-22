@@ -1,0 +1,90 @@
+{
+  "name": "aibrd",
+  "displayName": "aibrd",
+  "description": "BRD to living specification — actors, flows, rules, test cases, RTM, release notes",
+  "version": "0.1.0",
+  "publisher": "anirudhyadav",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aibrd.init",
+        "title": "aibrd: Initialize from BRD"
+      },
+      {
+        "command": "aibrd.update",
+        "title": "aibrd: Update with new requirement"
+      },
+      {
+        "command": "aibrd.generateTests",
+        "title": "aibrd: Generate Test Cases"
+      },
+      {
+        "command": "aibrd.releaseNotes",
+        "title": "aibrd: Generate Release Notes"
+      },
+      {
+        "command": "aibrd.showRtm",
+        "title": "aibrd: Show Traceability Matrix"
+      },
+      {
+        "command": "aibrd.showGaps",
+        "title": "aibrd: Show Gap Report"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "aibrd.assistant",
+        "name": "aibrd",
+        "description": "Query your BRD — flows, rules, tasks, coverage, RTM",
+        "isSticky": false
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "aibrd.rtmView",
+          "name": "aibrd Traceability"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "aibrd",
+      "properties": {
+        "aibrd.preferredModel": {
+          "type": "string",
+          "default": "claude-sonnet-4-5",
+          "description": "Copilot model to use for BRD analysis"
+        },
+        "aibrd.maxChunkTokens": {
+          "type": "number",
+          "default": 6000,
+          "description": "Max tokens per BRD chunk sent to LLM"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.4.0",
+    "@vscode/vsce": "^2.26.0"
+  },
+  "dependencies": {
+    "mammoth": "^1.7.1",
+    "pdf-parse": "^1.1.1"
+  }
+}
