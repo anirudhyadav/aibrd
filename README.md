@@ -295,6 +295,5 @@ From that point, the spec lives in the repo and evolves with the code.
 
 ---
 
-## License
-
-MIT
+## Author
+AnirudhYadav
