@@ -1,8 +1,21 @@
-# aibrd Playbook
+# aibrd Playbook — VS Code Extension
 
 **Practical guide for every role — from onboarding to release.**
 
-This playbook covers every feature built into aibrd v0.1.0, with step-by-step instructions for each persona. Keep this alongside your `.aibrd/` folder as your team's operating guide.
+This playbook covers the **VS Code Extension** (GitHub Enterprise + Copilot). For the standalone Python CLI and library, see [pythonlibrary/PLAYBOOK.md](pythonlibrary/PLAYBOOK.md).
+
+---
+
+## Which Tool Should I Use?
+
+| Situation | Use |
+|---|---|
+| Org team on GitHub Enterprise with Copilot | **This playbook** — VS Code Extension |
+| Personal repo, any machine, any LLM key | [Python Library Playbook](pythonlibrary/PLAYBOOK.md) |
+| CI/CD pipeline, scripting, automation | [Python Library Playbook](pythonlibrary/PLAYBOOK.md) |
+| Exploring aibrd without VS Code | [Python Library Playbook](pythonlibrary/PLAYBOOK.md) |
+
+Both tools produce the same `.aibrd/` output format and are fully compatible on the same repo.
 
 ---
 
@@ -657,3 +670,13 @@ Set these in `.vscode/settings.json` (project-level) or user settings (global):
 | Browse all requirements | aibrd Traceability panel (Explorer sidebar) |
 | See the full RTM | `@aibrd rtm` |
 | Set up CI gap checking | Add reusable workflow to `.github/workflows/` |
+
+---
+
+## Using aibrd Without VS Code?
+
+See the **[Python Library Playbook](pythonlibrary/PLAYBOOK.md)** for:
+- CLI usage (`aibrd init`, `aibrd update`, `aibrd tests`, `aibrd gaps`, `aibrd release`)
+- Bring-your-own API key (Anthropic, GitHub Models, OpenAI)
+- Scripting and automation use cases
+- Personal repo setup in under 5 minutes

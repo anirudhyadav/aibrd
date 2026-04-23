@@ -2,9 +2,16 @@
 
 **BRD → Living Specification → Code Traceability**
 
-aibrd is a VS Code extension that converts Business Requirements Documents (BRDs) into a version-controlled, living specification inside your repository — keeping the thread between what the business asked for and what got shipped, alive permanently.
+aibrd converts Business Requirements Documents (BRDs) into a version-controlled, living specification inside your repository — keeping the thread between what the business asked for and what got shipped, alive permanently.
 
-No external API keys. No backend service. Runs entirely on **GitHub Copilot** via the `vscode.lm` API.
+Available in two forms:
+
+| | VS Code Extension | Python Library |
+|---|---|---|
+| **Who** | Org teams (GitHub Enterprise + Copilot) | Personal repos, scripts, CI pipelines |
+| **LLM** | GitHub Copilot via `vscode.lm` — no key needed | Anthropic / GitHub Models / OpenAI — bring your key |
+| **Usage** | Command palette + Copilot Chat | CLI (`aibrd init`) or `import aibrd` |
+| **Docs** | [PLAYBOOK.md](PLAYBOOK.md) | [pythonlibrary/PLAYBOOK.md](pythonlibrary/PLAYBOOK.md) |
 
 ---
 
@@ -21,7 +28,7 @@ aibrd keeps that thread alive — in the repo itself, versioned alongside the co
 ```
 BRD (PDF / Word / Markdown)
         ↓
-  aibrd: Initialize
+  aibrd init  (CLI)  or  aibrd: Initialize from BRD  (VS Code)
         ↓
   .aibrd/
   ├── CONTEXT.md          ← living spec, versioned in git
@@ -30,26 +37,26 @@ BRD (PDF / Word / Markdown)
   ├── conflict-report.md  ← contradicting rules flagged
   └── modules/            ← auto-detected domains (large projects)
         ↓
-  PO brings new requirement → aibrd: Update → CONTEXT.md stays current
+  PO brings new requirement → aibrd update / aibrd: Update → CONTEXT.md stays current
         ↓
   Dev uses @aibrd tasks   → knows exactly what to build
-  QA uses aibrd: Tests    → test cases auto-generated
-  Lead uses aibrd: Release → release notes mapped to requirement IDs
+  QA uses aibrd tests     → test cases auto-generated
+  Lead uses aibrd release → release notes mapped to requirement IDs
 ```
 
 ---
 
-## Requirements
+## VS Code Extension
+
+### Requirements
 
 - VS Code 1.90+
 - GitHub Copilot (Individual, Business, or Enterprise)
 - GitHub Enterprise (for org-wide deployment)
 
----
+### Installation
 
-## Installation
-
-### Development
+**Development:**
 ```bash
 git clone https://github.com/anirudhyadav/aibrd.git
 cd aibrd
@@ -57,17 +64,14 @@ npm install
 # Press F5 in VS Code to launch Extension Development Host
 ```
 
-### Org-wide Deployment
-Package the extension as a VSIX and deploy via your org's managed VS Code extension pipeline:
+**Org-wide deployment:**
 ```bash
 npm install
 npx vsce package
 # Distribute aibrd-0.1.0.vsix via MDM or VS Code Server
 ```
 
----
-
-## Commands
+### Commands
 
 | Command | Who Uses It | What It Does |
 |---|---|---|
@@ -78,11 +82,7 @@ npx vsce package
 | `aibrd: Show Traceability Matrix` | Anyone | Refreshes the RTM tree view in the sidebar |
 | `aibrd: Show Gap Report` | Dev / Lead | Checks open file against requirements for coverage gaps |
 
----
-
-## Copilot Chat — @aibrd
-
-Once initialized, use `@aibrd` directly in Copilot Chat:
+### Copilot Chat — @aibrd
 
 ```
 @aibrd what is BF-003?
@@ -98,11 +98,73 @@ Once initialized, use `@aibrd` directly in Copilot Chat:
 | `@aibrd coverage` | Check selected code against BRD requirements |
 | `@aibrd rtm` | Show the traceability matrix in chat |
 
+### Configuration
+
+```json
+// .vscode/settings.json or user settings
+{
+  "aibrd.preferredModel": "claude-sonnet-4-5",
+  "aibrd.maxChunkTokens": 6000
+}
+```
+
+---
+
+## Python Library
+
+### Requirements
+
+- Python 3.10+
+- One LLM provider key (see below)
+
+### Installation
+
+```bash
+cd pythonlibrary
+pip install -e .
+```
+
+### Configure LLM Provider
+
+Set **one** environment variable — aibrd auto-detects which provider to use:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # Claude (recommended)
+export GITHUB_TOKEN=ghp_...           # GitHub Models (free with any GitHub account)
+export OPENAI_API_KEY=sk-...          # OpenAI
+```
+
+### CLI Commands
+
+```bash
+aibrd init ./docs/brd.pdf             # initialize from BRD
+aibrd update "new requirement text"   # add PO requirement
+aibrd tests                           # generate test cases
+aibrd gaps src/payments.py            # check file coverage
+aibrd release v2.3.0                  # generate release notes
+```
+
+### Library Usage
+
+```python
+from aibrd.parsers import parse_file
+from aibrd.extractors.flows import extract_flows
+from aibrd.generators.context_md import generate_context_md
+from aibrd.analyzers.gap_detector import detect_gaps, format_gap_report
+
+brd = parse_file("requirements.pdf")
+flows = extract_flows(brd.text)
+gaps = detect_gaps(open(".aibrd/CONTEXT.md").read(), open("src/payments.py").read())
+print(format_gap_report(gaps))
+```
+
 ---
 
 ## The `.aibrd/` Folder
 
-aibrd writes all generated artifacts into `.aibrd/` at your workspace root. **Commit this folder to git** — it is the living specification for your project.
+Both the VS Code extension and Python library write to the same `.aibrd/` format — they are fully compatible on the same repo.
+
+**Commit `.aibrd/` to git** — it is the living specification for your project.
 
 ### Small Projects (flat mode)
 ```
@@ -139,7 +201,7 @@ aibrd writes all generated artifacts into `.aibrd/` at your workspace root. **Co
     └── v2.3.md
 ```
 
-Flat vs modular mode is detected automatically from the BRD size and structure. Module names are inferred by the LLM from the BRD content — no manual input needed.
+Flat vs modular mode is auto-detected from the BRD size and structure. Module names are inferred by the LLM — no manual input needed.
 
 ---
 
@@ -156,60 +218,11 @@ Every extracted item gets a stable ID that never changes and is never reused.
 
 **Types:** `BF` Business Flow · `BR` Business Rule · `AC` Acceptance Criteria · `FT` Feature · `TC` Test Case · `RN` Release Note · `ACT` Actor
 
-These IDs are referenced in PRs, test cases, release notes, and git commits — maintaining full traceability from requirement to code.
-
----
-
-## CONTEXT.md Format
-
-```markdown
-# CONTEXT.md
-_Module: payments | v1.3 | Updated: 2026-04-22_
-
-## Actors
-- **ACT-001**: Customer — End user initiating payments
-- **ACT-002**: Payment Gateway — External payment processor
-
-## Business Flows
-
-### PAY-BF-001: Customer initiates payment
-The customer selects items and proceeds to checkout.
-
-**Steps:**
-1. Customer selects payment method _(Customer)_
-2. System validates card details _(Payment Gateway)_
-3. Payment confirmed and order created
-
-_Rules: PAY-BR-001, PAY-BR-002_
-_AC: PAY-AC-001_
-
-## Business Rules
-
-### PAY-BR-001
-Payment must complete within 30 seconds.
-> Regulatory requirement per PSR 2023
-
-### PAY-BR-002
-Refunds are only permitted within 30 days of purchase.
-
-## Acceptance Criteria
-
-### PAY-AC-001
-- **Given** a customer has items in cart
-- **When** they submit a valid payment
-- **Then** confirmation is shown within 5 seconds
-_Flow: PAY-BF-001_
-
-## Changelog
-- 2026-04-22 v1.3: PAY-BR-003 added (compliance — PO via lead)
-- 2026-04-01 v1.2: PAY-BF-001 updated (retry flow added)
-```
-
 ---
 
 ## CI/CD — GitHub Actions
 
-Add one line to any repo's workflow to enable automatic gap checking on every PR:
+Add one line to any repo's workflow:
 
 ```yaml
 jobs:
@@ -217,71 +230,54 @@ jobs:
     uses: org/aibrd/.github/workflows/aibrd-reusable.yml@main
 ```
 
-The workflow uses `GITHUB_TOKEN` + GitHub Models API — no separate API key required. On each PR, it posts a gap analysis to the job summary showing which requirements may be impacted by the changes.
+Uses `GITHUB_TOKEN` + GitHub Models API — no separate API key required.
 
 ---
 
 ## Personas
 
-| Role | How They Use aibrd |
-|---|---|
-| **Tech Lead** | Runs `Initialize` once per project. Runs `Update` when PO brings new requirements. |
-| **PO / BA** | Works with Lead Engineer who runs `Update` on their behalf. Reviews CONTEXT.md for accuracy. |
-| **Developer** | Uses `@aibrd tasks` to understand what to build. References requirement IDs in PRs. |
-| **QA / Tester** | Runs `Generate Test Cases` to get Given/When/Then test cases per module. |
-| **Release Manager** | Runs `Generate Release Notes` to map shipped code to requirement IDs. |
-
----
-
-## Configuration
-
-```json
-// .vscode/settings.json or user settings
-{
-  "aibrd.preferredModel": "claude-sonnet-4-5",
-  "aibrd.maxChunkTokens": 6000
-}
-```
-
-| Setting | Default | Description |
+| Role | VS Code Extension | Python Library |
 |---|---|---|
-| `aibrd.preferredModel` | `claude-sonnet-4-5` | Copilot model for BRD analysis |
-| `aibrd.maxChunkTokens` | `6000` | Max tokens per BRD chunk (for large documents) |
+| **Tech Lead** | `aibrd: Initialize from BRD` | `aibrd init ./brd.pdf` |
+| **Lead Engineer** | `aibrd: Update with new requirement` | `aibrd update "..."` |
+| **Developer** | `@aibrd tasks` in Copilot Chat | — |
+| **QA / Tester** | `aibrd: Generate Test Cases` | `aibrd tests` |
+| **Release Manager** | `aibrd: Generate Release Notes` | `aibrd release v2.3.0` |
+| **Personal / Explorer** | — | `pip install -e . && aibrd init` |
 
 ---
 
-## Architecture
+## Repository Structure
 
 ```
 aibrd/
-├── src/
-│   ├── extension.ts              # Entry point
+├── src/                          # VS Code Extension (TypeScript)
+│   ├── extension.ts
 │   ├── chat/                     # @aibrd Copilot Chat participant
 │   ├── commands/                 # VS Code commands
 │   ├── views/                    # Webview panels + tree views
-│   ├── core/
+│   ├── core/                     # Parsers, extractors, generators, analyzers
+│   ├── llm/                      # vscode.lm wrapper — no API key
+│   └── workspace/                # File system operations
+├── pythonlibrary/                # Python Library + CLI
+│   ├── aibrd/
+│   │   ├── cli.py                # aibrd init / update / tests / gaps / release
+│   │   ├── llm/client.py         # Anthropic / GitHub Models / OpenAI
 │   │   ├── parsers/              # PDF, DOCX, Markdown
 │   │   ├── extractors/           # Actors, flows, rules, AC, modules
-│   │   ├── generators/           # CONTEXT.md, UAT, tests, RTM, reports
-│   │   ├── analyzers/            # Gap detection, change impact
-│   │   ├── registry.ts           # Stable ID management
-│   │   └── models/               # TypeScript types
-│   ├── llm/
-│   │   ├── client.ts             # vscode.lm wrapper (no API key)
-│   │   └── context_builder.ts    # Token-aware prompt construction
-│   └── workspace/
-│       ├── detector.ts           # Flat vs modular mode
-│       ├── reader.ts             # Load relevant context per query
-│       └── writer.ts             # Safe .aibrd/ file writes
-└── .github/workflows/
-    └── aibrd-reusable.yml        # Reusable CI gap check
+│   │   ├── generators/           # CONTEXT.md, tests, RTM, reports
+│   │   └── analyzers/            # Gap detection, change impact
+│   ├── pyproject.toml
+│   └── PLAYBOOK.md
+├── .github/workflows/
+│   └── aibrd-reusable.yml        # Reusable CI gap check
+├── PLAYBOOK.md                   # VS Code Extension playbook
+└── README.md
 ```
-
-**Key design principle:** `llm/client.ts` is the only file that touches the LLM. Every other file is pure logic — fully testable without Copilot.
 
 ---
 
-## Onboarding a New Team
+## Onboarding a New Team (VS Code Extension)
 
 1. Export BRD from Confluence as PDF or Word
 2. Open the project repo in VS Code
@@ -289,11 +285,26 @@ aibrd/
 4. Review generated `.aibrd/` folder
 5. Commit `.aibrd/` to git
 6. Add the reusable workflow to CI
-7. Share this README with the team
+7. Share [PLAYBOOK.md](PLAYBOOK.md) with the team
 
-From that point, the spec lives in the repo and evolves with the code.
+## Getting Started (Python Library)
+
+```bash
+cd pythonlibrary
+pip install -e .
+export GITHUB_TOKEN=ghp_...   # free with any GitHub account
+aibrd init ./my-brd.pdf
+git add .aibrd/ && git commit -m "feat: add aibrd living spec"
+```
+
+See [pythonlibrary/PLAYBOOK.md](pythonlibrary/PLAYBOOK.md) for the full guide.
 
 ---
 
+## License
+
+MIT
+
 ## Author
-AnirudhYadav
+
+Anirudh Yadav
