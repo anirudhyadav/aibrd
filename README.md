@@ -2,7 +2,7 @@
 
 **BRD → Living Specification → Code Traceability**
 
-aibrd converts Business Requirements Documents (BRDs) into a version-controlled, living specification inside your repository — keeping the thread between what the business asked for and what got shipped, alive permanently.
+aibrd converts Business Requirements Documents (BRDs) into a version-controlled, living specification inside your repository — keeping the thread between what the business asked for and what got shipped alive permanently.
 
 Available in two forms:
 
@@ -26,9 +26,9 @@ aibrd keeps that thread alive — in the repo itself, versioned alongside the co
 ## How It Works
 
 ```
-BRD (PDF / Word / Markdown)
+BRD (PDF / Word / Markdown / Confluence)
         ↓
-  aibrd init  (CLI)  or  aibrd: Initialize from BRD  (VS Code)
+  aibrd init  or  aibrd: Initialize from BRD
         ↓
   .aibrd/
   ├── CONTEXT.md          ← living spec, versioned in git
@@ -37,11 +37,13 @@ BRD (PDF / Word / Markdown)
   ├── conflict-report.md  ← contradicting rules flagged
   └── modules/            ← auto-detected domains (large projects)
         ↓
-  PO brings new requirement → aibrd update / aibrd: Update → CONTEXT.md stays current
+  PO brings new requirement → aibrd update → CONTEXT.md stays current
         ↓
-  Dev uses @aibrd tasks   → knows exactly what to build
-  QA uses aibrd tests     → test cases auto-generated
-  Lead uses aibrd release → release notes mapped to requirement IDs
+  Dev uses @aibrd tasks       → knows exactly what to build
+  QA  uses aibrd tests        → test cases auto-generated
+  Lead uses aibrd sprint      → sprint tasks with story points
+  Lead uses aibrd release     → release notes mapped to IDs
+  Lead uses aibrd po-report   → plain-English summary for PO
 ```
 
 ---
@@ -68,10 +70,10 @@ npm install
 ```bash
 npm install
 npx vsce package
-# Distribute aibrd-0.1.0.vsix via MDM or VS Code Server
+# Distribute aibrd-0.2.0.vsix via MDM or VS Code Server
 ```
 
-### Commands
+### Commands — Core
 
 | Command | Who Uses It | What It Does |
 |---|---|---|
@@ -81,6 +83,31 @@ npx vsce package
 | `aibrd: Generate Release Notes` | Lead / DevOps | Maps git diff to requirement IDs → release notes |
 | `aibrd: Show Traceability Matrix` | Anyone | Refreshes the RTM tree view in the sidebar |
 | `aibrd: Show Gap Report` | Dev / Lead | Checks open file against requirements for coverage gaps |
+
+### Commands — Quality & Analysis
+
+| Command | What It Does |
+|---|---|
+| `aibrd: Analyse Change Impact` | Diff two BRD versions → flags new, changed, removed requirements |
+| `aibrd: Validate CONTEXT.md` | Checks structure, cross-refs, duplicate IDs, missing changelogs |
+| `aibrd: Draft Pull Request Description` | git diff + requirements → traceable PR description |
+
+### Commands — Delivery Tools
+
+| Command | What It Does |
+|---|---|
+| `aibrd: Generate Sprint Feed` | LLM → TASK-001 with story points, priority, AC checklist |
+| `aibrd: Derive API Contracts` | Business flows → OpenAPI 3.0 YAML or Markdown spec |
+| `aibrd: Generate PO Progress Report` | Plain-English progress report (no IDs visible) for PO sign-off |
+| `aibrd: Map Compliance Frameworks` | Tag requirements to GDPR, WCAG, HIPAA, SOX, PCI-DSS, ISO27001 |
+
+### Commands — Ingestion & Traceability
+
+| Command | What It Does |
+|---|---|
+| `aibrd: Ingest from Confluence` | Fetch Confluence page + children directly via REST API |
+| `aibrd: Check Requirement Staleness` | Cross-ref BF-XXX IDs against git log → flag 14/30-day drift |
+| `aibrd: Link Requirements to Test Files` | Scan test files for requirement ID mentions → coverage % |
 
 ### Copilot Chat — @aibrd
 
@@ -101,10 +128,11 @@ npx vsce package
 ### Configuration
 
 ```json
-// .vscode/settings.json or user settings
+// .vscode/settings.json
 {
   "aibrd.preferredModel": "claude-sonnet-4-5",
-  "aibrd.maxChunkTokens": 6000
+  "aibrd.maxChunkTokens": 6000,
+  "aibrd.confluenceBaseUrl": "https://yourorg.atlassian.net"
 }
 ```
 
@@ -115,7 +143,7 @@ npx vsce package
 ### Requirements
 
 - Python 3.10+
-- One LLM provider key (see below)
+- One LLM provider key (Anthropic / GitHub Models / OpenAI)
 
 ### Installation
 
@@ -126,16 +154,17 @@ pip install -e .
 
 ### Configure LLM Provider
 
-Set **one** environment variable — aibrd auto-detects which provider to use:
+Set **one** environment variable:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...   # Claude (recommended)
-export GITHUB_TOKEN=ghp_...           # GitHub Models (free with any GitHub account)
+export GITHUB_TOKEN=ghp_...           # GitHub Models (free)
 export OPENAI_API_KEY=sk-...          # OpenAI
 ```
 
 ### CLI Commands
 
+**Core:**
 ```bash
 aibrd init ./docs/brd.pdf             # initialize from BRD
 aibrd update "new requirement text"   # add PO requirement
@@ -144,13 +173,40 @@ aibrd gaps src/payments.py            # check file coverage
 aibrd release v2.3.0                  # generate release notes
 ```
 
+**Quality & Analysis:**
+```bash
+aibrd validate                        # validate .aibrd/ integrity
+aibrd pr-draft --base main            # draft PR description
+aibrd change-impact ./brd-v2.pdf      # analyse BRD change impact
+```
+
+**Delivery Tools:**
+```bash
+aibrd sprint                          # generate sprint tasks
+aibrd sprint --github-issues          # output as GitHub Issues JSON
+aibrd api-contracts --format openapi  # derive OpenAPI spec
+aibrd po-report v2.3.0                # plain-English PO report
+aibrd compliance --fw GDPR --fw HIPAA # compliance mapping
+```
+
+**Ingestion & Traceability:**
+```bash
+aibrd confluence --url https://org.atlassian.net --space ENG --page "Payment BRD" --token ...
+aibrd stale                           # staleness report
+aibrd test-linkage                    # test file coverage report
+```
+
 ### Library Usage
 
 ```python
 from aibrd.parsers import parse_file
 from aibrd.extractors.flows import extract_flows
 from aibrd.generators.context_md import generate_context_md
+from aibrd.generators.sprint_feed import generate_sprint_feed, format_sprint_feed
+from aibrd.generators.compliance_mapper import map_compliance
 from aibrd.analyzers.gap_detector import detect_gaps, format_gap_report
+from aibrd.analyzers.stale_detector import detect_stale_requirements
+from aibrd.analyzers.test_linkage import link_test_files
 
 brd = parse_file("requirements.pdf")
 flows = extract_flows(brd.text)
@@ -162,9 +218,7 @@ print(format_gap_report(gaps))
 
 ## The `.aibrd/` Folder
 
-Both the VS Code extension and Python library write to the same `.aibrd/` format — they are fully compatible on the same repo.
-
-**Commit `.aibrd/` to git** — it is the living specification for your project.
+Both tools write to the same format — fully compatible on the same repo. **Commit `.aibrd/` to git.**
 
 ### Small Projects (flat mode)
 ```
@@ -174,34 +228,47 @@ Both the VS Code extension and Python library write to the same `.aibrd/` format
 ├── index.md               # Traceability matrix
 ├── ambiguity-report.md    # Vague terms flagged
 ├── conflict-report.md     # Contradicting rules
+├── change-impact-report.md
+├── compliance-map.md
+├── sprint-feed.md
+├── staleness-report.md
+├── test-linkage-report.md
+├── openapi.yaml / api-contracts.md
 ├── tests/
 │   └── test-cases.md
 └── releases/
-    └── v1.0.md
+    ├── v1.0.md
+    └── po-report-v1.0.md
 ```
 
 ### Large Projects (modular mode — auto-detected)
 ```
 .aibrd/
 ├── registry.json
-├── index.md               # Project overview + module list + RTM
+├── index.md
+├── ambiguity-report.md
+├── conflict-report.md
+├── compliance-map.md
+├── sprint-feed.md
+├── staleness-report.md
+├── test-linkage-report.md
 ├── modules/
 │   ├── payments/
 │   │   ├── CONTEXT.md     # PAY-BF-001, PAY-BR-001 ...
+│   │   ├── PAY-openapi.yaml
 │   │   └── tests/
 │   │       └── test-cases.md
 │   ├── auth/
-│   │   └── CONTEXT.md     # AUTH-BF-001, AUTH-BR-001 ...
+│   │   └── CONTEXT.md
 │   └── notifications/
 │       └── CONTEXT.md
 ├── shared/
-│   ├── actors.md          # ACT-001 ... global actors
-│   └── global-rules.md    # GBR-001 ... cross-cutting rules
+│   ├── actors.md
+│   └── global-rules.md
 └── releases/
-    └── v2.3.md
+    ├── v2.3.md
+    └── po-report-v2.3.md
 ```
-
-Flat vs modular mode is auto-detected from the BRD size and structure. Module names are inferred by the LLM — no manual input needed.
 
 ---
 
@@ -216,7 +283,7 @@ Every extracted item gets a stable ID that never changes and is never reused.
 | Global actors | `ACT-NNN` | `ACT-001` |
 | Global rules | `GBR-NNN` | `GBR-002` |
 
-**Types:** `BF` Business Flow · `BR` Business Rule · `AC` Acceptance Criteria · `FT` Feature · `TC` Test Case · `RN` Release Note · `ACT` Actor
+**Types:** `BF` Business Flow · `BR` Business Rule · `AC` Acceptance Criteria · `TC` Test Case · `RN` Release Note · `ACT` Actor
 
 ---
 
@@ -236,13 +303,17 @@ Uses `GITHUB_TOKEN` + GitHub Models API — no separate API key required.
 
 ## Personas
 
-| Role | VS Code Extension | Python Library |
+| Role | VS Code Extension | Python CLI |
 |---|---|---|
 | **Tech Lead** | `aibrd: Initialize from BRD` | `aibrd init ./brd.pdf` |
 | **Lead Engineer** | `aibrd: Update with new requirement` | `aibrd update "..."` |
 | **Developer** | `@aibrd tasks` in Copilot Chat | — |
 | **QA / Tester** | `aibrd: Generate Test Cases` | `aibrd tests` |
 | **Release Manager** | `aibrd: Generate Release Notes` | `aibrd release v2.3.0` |
+| **Scrum Master** | `aibrd: Generate Sprint Feed` | `aibrd sprint` |
+| **Architect** | `aibrd: Derive API Contracts` | `aibrd api-contracts` |
+| **Compliance Officer** | `aibrd: Map Compliance Frameworks` | `aibrd compliance --fw GDPR` |
+| **Product Owner** | receives `aibrd: Generate PO Progress Report` | receives `aibrd po-report` |
 | **Personal / Explorer** | — | `pip install -e . && aibrd init` |
 
 ---
@@ -252,21 +323,33 @@ Uses `GITHUB_TOKEN` + GitHub Models API — no separate API key required.
 ```
 aibrd/
 ├── src/                          # VS Code Extension (TypeScript)
-│   ├── extension.ts
+│   ├── extension.ts              # Registers all 16 commands + chat participant
 │   ├── chat/                     # @aibrd Copilot Chat participant
-│   ├── commands/                 # VS Code commands
+│   ├── commands/                 # 16 VS Code commands
+│   │   ├── init.ts, update.ts, generateTests.ts, releaseNotes.ts
+│   │   ├── changeImpact.ts, validateContext.ts, prDraft.ts
+│   │   ├── sprintFeed.ts, apiContracts.ts, poReport.ts, complianceMapper.ts
+│   │   └── ingestConfluence.ts, staleDetector.ts, testLinkage.ts
 │   ├── views/                    # Webview panels + tree views
-│   ├── core/                     # Parsers, extractors, generators, analyzers
+│   ├── core/
+│   │   ├── parsers/              # PDF, DOCX, Markdown, Confluence
+│   │   ├── extractors/           # Actors, flows, rules, AC, module detector
+│   │   ├── generators/           # CONTEXT.md, tests, RTM, sprint, API contracts,
+│   │   │                         # PO report, compliance mapper
+│   │   └── analyzers/            # Gap detector, change impact, validator,
+│   │                             # stale detector, test linkage
 │   ├── llm/                      # vscode.lm wrapper — no API key
 │   └── workspace/                # File system operations
 ├── pythonlibrary/                # Python Library + CLI
 │   ├── aibrd/
-│   │   ├── cli.py                # aibrd init / update / tests / gaps / release
+│   │   ├── cli.py                # 15 CLI commands
 │   │   ├── llm/client.py         # Anthropic / GitHub Models / OpenAI
-│   │   ├── parsers/              # PDF, DOCX, Markdown
+│   │   ├── parsers/              # PDF, DOCX, Markdown, Confluence
 │   │   ├── extractors/           # Actors, flows, rules, AC, modules
-│   │   ├── generators/           # CONTEXT.md, tests, RTM, reports
-│   │   └── analyzers/            # Gap detection, change impact
+│   │   ├── generators/           # CONTEXT.md, tests, RTM, sprint, API contracts,
+│   │   │                         # PO report, compliance mapper
+│   │   └── analyzers/            # Gap, change impact, validator,
+│   │                             # stale detector, test linkage
 │   ├── pyproject.toml
 │   └── PLAYBOOK.md
 ├── .github/workflows/
@@ -279,10 +362,10 @@ aibrd/
 
 ## Onboarding a New Team (VS Code Extension)
 
-1. Export BRD from Confluence as PDF or Word
+1. Export BRD from Confluence as PDF or Word (or use `aibrd: Ingest from Confluence` directly)
 2. Open the project repo in VS Code
 3. Run `aibrd: Initialize from BRD` → select the file
-4. Review generated `.aibrd/` folder
+4. Review generated `.aibrd/` folder — resolve ambiguity and conflict reports
 5. Commit `.aibrd/` to git
 6. Add the reusable workflow to CI
 7. Share [PLAYBOOK.md](PLAYBOOK.md) with the team

@@ -27,13 +27,17 @@ Both tools produce the same `.aibrd/` output format and are fully compatible on 
 4. [Developer — Daily Usage](#4-developer--daily-usage)
 5. [QA / Tester — Generating Test Cases](#5-qa--tester--generating-test-cases)
 6. [Release Manager — Release Notes](#6-release-manager--release-notes)
-7. [Understanding the .aibrd/ Folder](#7-understanding-the-aibrd-folder)
-8. [Stable ID Reference](#8-stable-id-reference)
-9. [CONTEXT.md Structure](#9-contextmd-structure)
-10. [Copilot Chat — @aibrd Reference](#10-copilot-chat--aibrd-reference)
-11. [CI/CD — GitHub Actions Setup](#11-cicd--github-actions-setup)
-12. [Configuration Reference](#12-configuration-reference)
-13. [Troubleshooting](#13-troubleshooting)
+7. [Quality & Analysis Commands](#7-quality--analysis-commands)
+8. [Delivery Tools](#8-delivery-tools)
+9. [Ingestion & Traceability](#9-ingestion--traceability)
+10. [Understanding the .aibrd/ Folder](#10-understanding-the-aibrd-folder)
+11. [Stable ID Reference](#11-stable-id-reference)
+12. [CONTEXT.md Structure](#12-contextmd-structure)
+13. [Copilot Chat — @aibrd Reference](#13-copilot-chat--aibrd-reference)
+14. [CI/CD — GitHub Actions Setup](#14-cicd--github-actions-setup)
+15. [Configuration Reference](#15-configuration-reference)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Quick Reference Card](#17-quick-reference-card)
 
 ---
 
@@ -67,6 +71,7 @@ Export your BRD from Confluence/SharePoint in one of these formats:
 | `.pdf` | Best for finalized documents |
 | `.docx` / `.doc` | Best for editable Word documents |
 | `.md` | If already in Markdown |
+| Confluence page | Use `aibrd: Ingest from Confluence` directly (no file needed) |
 
 ### Step 2 — Run Initialize
 
@@ -106,6 +111,12 @@ After initialization, open `.aibrd/` and review:
 - **`ambiguity-report.md`** — resolve flagged terms with the PO before development starts
 - **`conflict-report.md`** — escalate conflicting rules to the PO immediately
 
+Run a validation pass:
+
+**Command Palette → `aibrd: Validate CONTEXT.md`**
+
+This checks cross-references, duplicate IDs, and missing changelog entries before anything is committed.
+
 ### Step 4 — Commit to Git
 
 ```bash
@@ -117,7 +128,7 @@ The `.aibrd/` folder is now version-controlled alongside your code. Every team m
 
 ### Step 5 — Add to CI
 
-Add the reusable workflow to your repo (see [Section 11](#11-cicd--github-actions-setup)).
+Add the reusable workflow to your repo (see [Section 14](#14-cicd--github-actions-setup)).
 
 ---
 
@@ -138,7 +149,20 @@ When the PO brings new requirements (via email, Jira, Confluence, or verbal), th
    - Append to the correct CONTEXT.md
    - Add a changelog entry with the date and version
 
-### Example Input
+### Analysing Change Impact Before Updating
+
+When a significantly revised BRD arrives, run **`aibrd: Analyse Change Impact`** first:
+
+1. Command Palette → **`aibrd: Analyse Change Impact`**
+2. File picker opens — select the new BRD version
+3. aibrd compares it to the existing CONTEXT.md and produces a report:
+   - Requirements that have changed scope
+   - Requirements that appear to have been removed
+   - Entirely new requirements not yet in the spec
+
+Review `.aibrd/change-impact-report.md` with the PO before committing any updates.
+
+### Example Input (Update Command)
 
 ```
 Users must be able to reset their password using an SMS OTP.
@@ -163,7 +187,7 @@ Maximum 3 failed OTP attempts before account locks for 15 minutes.
 - **When** they submit a valid OTP within 60 seconds
 - **Then** they are prompted to set a new password
 
-- 2026-04-22 v1.4: AUTH-BF-004, AUTH-BR-007, AUTH-BR-008, AUTH-AC-009 added (PO via lead)
+- 2026-04-23 v1.4: AUTH-BF-004, AUTH-BR-007, AUTH-BR-008, AUTH-AC-009 added (PO via lead)
 ```
 
 ### Commit the Update
@@ -228,18 +252,18 @@ Or in Copilot Chat:
 
 Returns a gap report showing which requirements are covered, partially covered, or missing in the selected code.
 
-### Referencing IDs in PRs
+### Auto-generate Your PR Description
 
-When opening a PR, reference requirement IDs in the description:
+Before opening a pull request:
 
-```markdown
-## Changes
-Implements PAY-BF-003 (refund initiation flow)
-Satisfies PAY-BR-005, PAY-BR-006
-Closes PAY-AC-008, PAY-AC-009
-```
+1. Command Palette → **`aibrd: Draft Pull Request Description`**
+2. aibrd reads the git diff against `main`, maps it to requirement IDs, and generates:
+   - **What Changed** — plain English bullet list
+   - **Requirements Covered** — traced BF-XXX, BR-XXX, AC-XXX IDs
+   - **Test Coverage** — which test files cover the changes
+   - **Notes for Reviewer** — trade-offs and edge cases
 
-This makes the RTM useful — future `@aibrd rtm` calls and gap checks can map these.
+Copy the output into your PR description.
 
 ### Using the RTM Tree View
 
@@ -286,19 +310,18 @@ Scenario: Verify rule — Payment must complete within 30 seconds
 ```
 ```
 
-### What Gets Generated
+### Check Which Requirements Have Test File Coverage
 
-| Source | Test Case Type |
-|---|---|
-| Each `AC-XXX` (Acceptance Criteria) | Functional scenario test |
-| Each `BR-XXX` (Business Rule) | Boundary condition test |
+After writing test files, run:
 
-### Tracing Tests Back to Requirements
+**Command Palette → `aibrd: Link Requirements to Test Files`**
 
-Every `TC-XXX` ID traces to an `AC-XXX` or `BR-XXX`. This means:
-- A failing test always points back to a specific requirement
-- Coverage gaps are visible in the RTM
-- Regression failures can be linked directly to BRD items
+aibrd scans all test files in the workspace for requirement ID mentions (`// aibrd: PAY-BF-001` or any string occurrence) and produces a report showing:
+- Which requirements have test file references (✅ Covered)
+- Which requirements have no test file yet (❌ Not Covered)
+- Overall coverage percentage
+
+**Tip:** Add `// aibrd: BF-XXX` comments in your test files to improve traceability detection.
 
 ---
 
@@ -315,7 +338,7 @@ Every `TC-XXX` ID traces to an `AC-XXX` or `BR-XXX`. This means:
 
 ```markdown
 # Release Notes — v2.3.0
-_RN-004 | Generated: 2026-04-22_
+_RN-004 | Generated: 2026-04-23_
 
 ## Summary
 - Payment refund flow (PAY-BF-003) fully implemented
@@ -328,24 +351,202 @@ _RN-004 | Generated: 2026-04-22_
 Customers can now initiate refunds within 30 days of purchase.
 Satisfies: PAY-BR-005, PAY-BR-006, PAY-AC-008
 
-### AUTH-BF-004: Password Reset via SMS OTP
-...
-
 ## Known Gaps
 - NOTIF-BF-002: Email notification on refund — not yet implemented
 ```
 
-### Release notes are saved to:
+Saved to: `.aibrd/releases/v2.3.0.md`
 
-```
-.aibrd/releases/v2.3.0.md
-```
+### Generate a PO-Friendly Report
 
-Commit this file as part of your release process.
+For sharing with the Product Owner (who doesn't read requirement IDs):
+
+1. Command Palette → **`aibrd: Generate PO Progress Report`**
+2. Enter the version and git range
+3. A plain-English report is produced — no requirement IDs visible, no technical jargon
+
+Sections:
+- **What Was Asked For** — plain English summary of requirements
+- **What Was Built** — plain English summary of git changes
+- **Still To Do** — outstanding items
+- **Risks & Notes** — anything the PO should know before sign-off
+
+Saved to: `.aibrd/releases/po-report-v2.3.0.md`
 
 ---
 
-## 7. Understanding the .aibrd/ Folder
+## 7. Quality & Analysis Commands
+
+### Validate CONTEXT.md
+
+**Command Palette → `aibrd: Validate CONTEXT.md`**
+
+Checks without LLM (instant, pure logic):
+- `registry.json` exists and is readable
+- `CONTEXT.md` or module files exist
+- All ID cross-references (e.g. `_Rules: BR-001_`) resolve to real IDs
+- No duplicate IDs across modules
+- Changelog section present
+
+Run this before any commit. Exits with a pass/fail message and saves a report.
+
+### Analyse Change Impact
+
+**Command Palette → `aibrd: Analyse Change Impact`**
+
+Select a new BRD file to compare against the current CONTEXT.md. Produces `.aibrd/change-impact-report.md` with:
+- Changed requirements (scope drift)
+- Removed requirements (potential deletions)
+- New requirements not yet registered
+
+### Check Requirement Staleness
+
+**Command Palette → `aibrd: Check Requirement Staleness`**
+
+Cross-references each BF-XXX ID against `git log` to find how many days have passed since any source file referencing that ID was last modified.
+
+| Threshold | Verdict |
+|---|---|
+| < 14 days since last code touch | 🟢 Ok |
+| 14–30 days | 🟡 Drifting |
+| > 30 days | 🔴 Stale |
+
+Saved to: `.aibrd/staleness-report.md`
+
+**Use case:** monthly spec hygiene review. Stale requirements may mean dropped scope or unreferenced code.
+
+---
+
+## 8. Delivery Tools
+
+### Generate Sprint Feed
+
+**Command Palette → `aibrd: Generate Sprint Feed`**
+
+For modular projects, select a module (or "All modules"). aibrd reads CONTEXT.md and asks the LLM to generate developer sprint tasks with:
+
+- `TASK-001` format ID
+- Verb-first action title
+- Story point estimate (Fibonacci: 1, 2, 3, 5, 8, 13)
+- Priority (high / medium / low)
+- Which requirement IDs it covers
+- Acceptance criteria checklist (`- [ ]`)
+
+Output grouped by priority with a summary table. Saved to `.aibrd/sprint-feed.md`.
+
+**Example output:**
+
+```markdown
+## 🔴 High Priority
+
+### TASK-001: Implement payment initiation flow
+**Story Points:** 5
+**Module:** payments
+**Traces:** PAY-BF-001, PAY-BR-002
+**Acceptance Criteria:**
+- [ ] Payment completes within 30 seconds
+- [ ] Error shown on invalid card details
+```
+
+### Derive API Contracts
+
+**Command Palette → `aibrd: Derive API Contracts`**
+
+Select a module and output format:
+- **OpenAPI 3.0 (YAML)** — machine-readable, import into Swagger/Postman
+- **Markdown** — human-readable for review
+
+aibrd reads business flows and infers likely REST endpoints, request bodies, and response codes.
+
+Output saved to `.aibrd/<module>-openapi.yaml` or `.aibrd/<module>-api-contracts.md`.
+
+**Example output (Markdown):**
+
+```markdown
+## `POST /api/v1/payments`
+**Initiate a payment**
+_Traces: PAY-BF-001_
+
+**Request Body:**
+```json
+{ "amount": "number", "currency": "string", "paymentMethod": "string" }
+```
+
+**Responses:**
+- `200`: Payment accepted
+- `400`: Invalid payload
+- `402`: Insufficient funds
+```
+
+> These are AI-derived drafts — always review with the engineering team before implementation.
+
+### Map Compliance Frameworks
+
+**Command Palette → `aibrd: Map Compliance Frameworks`**
+
+Select one or more frameworks from the multi-select picker:
+`GDPR` · `WCAG` · `HIPAA` · `SOX` · `PCI-DSS` · `ISO27001`
+
+aibrd scans all requirements and flags those with genuine compliance relevance, with:
+- The specific clause (e.g. `GDPR Art. 17 — Right to erasure`)
+- Why it applies (rationale)
+- Risk level: 🔴 High / 🟡 Medium / 🟢 Low
+- A dedicated **High Risk Items — Action Required** section
+
+Saved to: `.aibrd/compliance-map.md`
+
+> Auto-generated mapping. Always validate with your compliance team before submission.
+
+---
+
+## 9. Ingestion & Traceability
+
+### Ingest from Confluence
+
+**Command Palette → `aibrd: Ingest from Confluence`**
+
+Bypasses the file export step entirely — fetch the BRD directly from Confluence:
+
+1. Enter your Confluence base URL (e.g. `https://yourorg.atlassian.net`)
+2. Enter the space key (e.g. `ENG`)
+3. Enter the page title (exact match)
+4. Enter your API token (stored in memory only — never written to disk)
+5. Enter your email (Atlassian Cloud only — leave blank for Server/DC)
+
+aibrd fetches the page and its direct child pages, strips HTML, and runs the full initialization pipeline. Module detection and ID assignment happen the same as with file-based init.
+
+**Pre-fill the base URL** in settings to skip step 1 each time:
+```json
+{ "aibrd.confluenceBaseUrl": "https://yourorg.atlassian.net" }
+```
+
+### Link Requirements to Test Files
+
+**Command Palette → `aibrd: Link Requirements to Test Files`**
+
+Scans all test files (`*.test.ts`, `*.spec.py`, `*Test.java`, `*_test.go`, etc.) in the workspace for any occurrence of a requirement ID (BF-XXX, AC-XXX, TC-XXX).
+
+Output includes:
+- Coverage percentage
+- ✅ Covered requirements with which test files reference them
+- ❌ Uncovered requirements
+- Recommended actions
+
+Saved to: `.aibrd/test-linkage-report.md`
+
+**To improve detection**, add inline comments in your test files:
+```typescript
+// aibrd: PAY-BF-001
+it('should process payment within 30 seconds', () => { ... })
+```
+```python
+# aibrd: AUTH-AC-009
+def test_sms_otp_password_reset(): ...
+```
+
+---
+
+## 10. Understanding the .aibrd/ Folder
 
 ### Flat Mode (small projects)
 
@@ -353,16 +554,23 @@ Detected automatically when the BRD has fewer than 5 major sections or fewer tha
 
 ```
 .aibrd/
-├── registry.json          # ID counter — source of truth for all IDs
-├── CONTEXT.md             # Single living spec: actors, flows, rules, AC
-├── index.md               # Traceability matrix
-├── ambiguity-report.md    # Vague terms detected at init time
-├── conflict-report.md     # Conflicting rules detected at init time
+├── registry.json           # ID counter — source of truth for all IDs
+├── CONTEXT.md              # Single living spec: actors, flows, rules, AC
+├── index.md                # Traceability matrix
+├── ambiguity-report.md     # Vague terms detected at init time
+├── conflict-report.md      # Conflicting rules detected at init time
+├── change-impact-report.md # Generated by: Analyse Change Impact
+├── compliance-map.md       # Generated by: Map Compliance Frameworks
+├── sprint-feed.md          # Generated by: Generate Sprint Feed
+├── staleness-report.md     # Generated by: Check Requirement Staleness
+├── test-linkage-report.md  # Generated by: Link Requirements to Test Files
+├── openapi.yaml            # Generated by: Derive API Contracts (OpenAPI)
+├── api-contracts.md        # Generated by: Derive API Contracts (Markdown)
 ├── tests/
-│   └── test-cases.md      # All test cases
+│   └── test-cases.md
 └── releases/
     ├── v1.0.md
-    └── v1.1.md
+    └── po-report-v1.0.md
 ```
 
 ### Modular Mode (large projects)
@@ -372,25 +580,31 @@ Detected automatically when the BRD is large and multi-domain. Module names are 
 ```
 .aibrd/
 ├── registry.json
-├── index.md               # Project overview + full RTM across all modules
+├── index.md
 ├── ambiguity-report.md
 ├── conflict-report.md
+├── compliance-map.md        # across all modules
+├── sprint-feed.md           # across all modules
+├── staleness-report.md      # across all modules
+├── test-linkage-report.md   # across all modules
 ├── modules/
 │   ├── payments/
-│   │   ├── CONTEXT.md     # PAY-BF-001, PAY-BR-001, PAY-AC-001 ...
+│   │   ├── CONTEXT.md       # PAY-BF-001, PAY-BR-001, PAY-AC-001 ...
+│   │   ├── PAY-openapi.yaml
+│   │   ├── PAY-api-contracts.md
 │   │   └── tests/
 │   │       └── test-cases.md
 │   ├── auth/
-│   │   ├── CONTEXT.md     # AUTH-BF-001, AUTH-BR-001 ...
+│   │   ├── CONTEXT.md
 │   │   └── tests/
-│   │       └── test-cases.md
 │   └── notifications/
 │       └── CONTEXT.md
 ├── shared/
-│   ├── actors.md          # ACT-001 ... (global actors across all modules)
-│   └── global-rules.md    # GBR-001 ... (cross-cutting rules)
+│   ├── actors.md
+│   └── global-rules.md
 └── releases/
-    └── v2.3.md
+    ├── v2.3.md
+    └── po-report-v2.3.md
 ```
 
 ### registry.json
@@ -422,7 +636,7 @@ The ID registry is the most critical file. **Never edit it manually.**
 
 ---
 
-## 8. Stable ID Reference
+## 11. Stable ID Reference
 
 ### ID Format
 
@@ -432,7 +646,6 @@ The ID registry is the most critical file. **Never edit it manually.**
 | Large / modular | `PREFIX-TYPE-NNN` | `PAY-BF-012` |
 | Global actors | `ACT-NNN` | `ACT-003` |
 | Global rules | `GBR-NNN` | `GBR-001` |
-| Cross-references | inline | `PAY-BF-012 → AUTH-BR-003` |
 
 ### Type Reference
 
@@ -463,7 +676,7 @@ If two modules would produce the same prefix, a number suffix is appended (`PAY2
 
 ---
 
-## 9. CONTEXT.md Structure
+## 12. CONTEXT.md Structure
 
 Every CONTEXT.md follows this structure:
 
@@ -507,14 +720,9 @@ _Rules: BR-001_
 - YYYY-MM-DD vX.Y: Description of change (source)
 ```
 
-**Tips for reading CONTEXT.md:**
-- Each section heading (`###`) is a stable, linkable ID
-- The changelog at the bottom shows the evolution of the spec
-- Cross-references (`_Rules:_`, `_Flow:_`) show how items relate
-
 ---
 
-## 10. Copilot Chat — @aibrd Reference
+## 13. Copilot Chat — @aibrd Reference
 
 ### Full Command Reference
 
@@ -538,11 +746,9 @@ aibrd is token-aware. It never dumps the entire `.aibrd/` into the prompt. Inste
 - **Coverage check** → loads context relevant to the open file's path/module
 - **Tasks** → loads the full RTM from `index.md` + relevant CONTEXT files
 
-This keeps responses fast and within Copilot's context window even on large projects.
-
 ---
 
-## 11. CI/CD — GitHub Actions Setup
+## 14. CI/CD — GitHub Actions Setup
 
 ### Adding to a Repo
 
@@ -574,9 +780,7 @@ On every PR:
 3. Calls GitHub Models API (`GITHUB_TOKEN` — no extra key needed) with:
    - The requirement traceability from `index.md`
    - The list of changed files
-4. Posts a gap analysis to the GitHub Actions job summary:
-   - Which requirement IDs may be impacted
-   - Which requirements might be at risk of not being covered
+4. Posts a gap analysis to the GitHub Actions job summary
 
 ### Viewing Results
 
@@ -584,21 +788,23 @@ In your PR → Actions tab → `aibrd Gap Check` job → Summary tab.
 
 ---
 
-## 12. Configuration Reference
+## 15. Configuration Reference
 
 Set these in `.vscode/settings.json` (project-level) or user settings (global):
 
 ```json
 {
   "aibrd.preferredModel": "claude-sonnet-4-5",
-  "aibrd.maxChunkTokens": 6000
+  "aibrd.maxChunkTokens": 6000,
+  "aibrd.confluenceBaseUrl": "https://yourorg.atlassian.net"
 }
 ```
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `aibrd.preferredModel` | string | `claude-sonnet-4-5` | Copilot model ID to prefer. Falls back to any Claude model, then any available model. |
-| `aibrd.maxChunkTokens` | number | `6000` | Max tokens per BRD chunk. Lower this if you hit context errors. Raise it for faster processing on large documents. |
+| `aibrd.maxChunkTokens` | number | `6000` | Max tokens per BRD chunk. Lower this if you hit context errors. |
+| `aibrd.confluenceBaseUrl` | string | `""` | Pre-fill base URL for Confluence ingestion. |
 
 ### Model Options (Copilot Enterprise)
 
@@ -611,7 +817,7 @@ Set these in `.vscode/settings.json` (project-level) or user settings (global):
 
 ---
 
-## 13. Troubleshooting
+## 16. Troubleshooting
 
 ### "No Copilot LLM models available"
 
@@ -628,13 +834,34 @@ Set these in `.vscode/settings.json` (project-level) or user settings (global):
 
 - The BRD may be scanned (image-based PDF). Export from Confluence as a text-based PDF
 - Try exporting as `.docx` instead — Word format preserves text reliably
-- If using `.md`, ensure the file has clear headings and structured content
+- Use `aibrd: Ingest from Confluence` to bypass the file export entirely
+
+### Confluence ingestion fails with 401 / 403
+
+- For Atlassian Cloud: your email AND an API token are both required (not your password)
+- For Server/DC: use a Personal Access Token, leave email blank
+- Generate an API token at: `https://id.atlassian.com/manage-profile/security/api-tokens`
+
+### Sprint Feed tasks are generic / low quality
+
+- Ensure your CONTEXT.md has detailed flow descriptions and well-formed AC (Given/When/Then)
+- Run `aibrd: Update with new requirement` to enrich sparse entries before generating the sprint feed
+
+### Compliance mapper returns no tags
+
+- Try broader frameworks — GDPR and WCAG have the widest applicability
+- Ensure flows and rules have meaningful descriptions (not just IDs with short names)
+
+### Staleness report shows everything as stale
+
+- Ensure requirement IDs (e.g. `PAY-BF-001`) appear in source files or comments
+- Add `// aibrd: PAY-BF-001` inline comments to help the detector find code references
+- The workspace must be a git repository with commit history
 
 ### Module detection puts everything in one module
 
 - The BRD may genuinely be single-domain — flat mode is correct
 - If you expect multiple modules, ensure the BRD has clear section headings per domain
-- You can lower `aibrd.maxChunkTokens` to process the BRD in smaller passes
 
 ### IDs look wrong after a failed init
 
@@ -648,25 +875,29 @@ Set these in `.vscode/settings.json` (project-level) or user settings (global):
 - Reload VS Code window: Command Palette → `Developer: Reload Window`
 - The chat participant requires VS Code 1.90+
 
-### CI workflow skips with "No .aibrd/registry.json found"
-
-- The `.aibrd/` folder must be committed to git
-- Run `aibrd: Initialize` locally, commit `.aibrd/`, and push before the workflow will run
-- Ensure the `aibrd_dir` input matches the actual path in your repo
-
 ---
 
-## Quick Reference Card
+## 17. Quick Reference Card
 
-| I want to... | Command / Action |
+| I want to... | Command |
 |---|---|
 | Start a project | `aibrd: Initialize from BRD` |
+| Start from Confluence directly | `aibrd: Ingest from Confluence` |
 | Add a new PO requirement | `aibrd: Update with new requirement` |
+| See what changed in a new BRD | `aibrd: Analyse Change Impact` |
+| Validate the spec integrity | `aibrd: Validate CONTEXT.md` |
 | Know what to build | `@aibrd tasks` in Copilot Chat |
 | Understand a requirement | `@aibrd what is BF-003` |
 | Generate test cases | `aibrd: Generate Test Cases` |
+| See which tests cover requirements | `aibrd: Link Requirements to Test Files` |
 | Check my code covers requirements | `aibrd: Show Gap Report` |
+| Draft a PR description | `aibrd: Draft Pull Request Description` |
+| Generate sprint tasks | `aibrd: Generate Sprint Feed` |
+| Derive REST API contracts | `aibrd: Derive API Contracts` |
+| Map compliance frameworks | `aibrd: Map Compliance Frameworks` |
 | Prepare release notes | `aibrd: Generate Release Notes` |
+| Share progress with PO | `aibrd: Generate PO Progress Report` |
+| Check for stale requirements | `aibrd: Check Requirement Staleness` |
 | Browse all requirements | aibrd Traceability panel (Explorer sidebar) |
 | See the full RTM | `@aibrd rtm` |
 | Set up CI gap checking | Add reusable workflow to `.github/workflows/` |
@@ -676,7 +907,7 @@ Set these in `.vscode/settings.json` (project-level) or user settings (global):
 ## Using aibrd Without VS Code?
 
 See the **[Python Library Playbook](pythonlibrary/PLAYBOOK.md)** for:
-- CLI usage (`aibrd init`, `aibrd update`, `aibrd tests`, `aibrd gaps`, `aibrd release`)
+- CLI usage with all 15 commands
 - Bring-your-own API key (Anthropic, GitHub Models, OpenAI)
 - Scripting and automation use cases
 - Personal repo setup in under 5 minutes
