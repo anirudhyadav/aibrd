@@ -2,7 +2,7 @@
   "name": "aibrd",
   "displayName": "aibrd",
   "description": "BRD to living specification — actors, flows, rules, test cases, RTM, release notes",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "anirudhyadav",
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Other"],
@@ -10,30 +10,22 @@
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "aibrd.init",
-        "title": "aibrd: Initialize from BRD"
-      },
-      {
-        "command": "aibrd.update",
-        "title": "aibrd: Update with new requirement"
-      },
-      {
-        "command": "aibrd.generateTests",
-        "title": "aibrd: Generate Test Cases"
-      },
-      {
-        "command": "aibrd.releaseNotes",
-        "title": "aibrd: Generate Release Notes"
-      },
-      {
-        "command": "aibrd.showRtm",
-        "title": "aibrd: Show Traceability Matrix"
-      },
-      {
-        "command": "aibrd.showGaps",
-        "title": "aibrd: Show Gap Report"
-      }
+      { "command": "aibrd.init",             "title": "aibrd: Initialize from BRD",              "category": "aibrd" },
+      { "command": "aibrd.update",           "title": "aibrd: Update with new requirement",       "category": "aibrd" },
+      { "command": "aibrd.generateTests",    "title": "aibrd: Generate Test Cases",               "category": "aibrd" },
+      { "command": "aibrd.releaseNotes",     "title": "aibrd: Generate Release Notes",            "category": "aibrd" },
+      { "command": "aibrd.showRtm",          "title": "aibrd: Show Traceability Matrix",          "category": "aibrd" },
+      { "command": "aibrd.showGaps",         "title": "aibrd: Show Gap Report",                   "category": "aibrd" },
+      { "command": "aibrd.changeImpact",     "title": "aibrd: Analyse Change Impact",             "category": "aibrd" },
+      { "command": "aibrd.validateContext",  "title": "aibrd: Validate CONTEXT.md",               "category": "aibrd" },
+      { "command": "aibrd.prDraft",          "title": "aibrd: Draft Pull Request Description",    "category": "aibrd" },
+      { "command": "aibrd.sprintFeed",       "title": "aibrd: Generate Sprint Feed",              "category": "aibrd" },
+      { "command": "aibrd.apiContracts",     "title": "aibrd: Derive API Contracts",              "category": "aibrd" },
+      { "command": "aibrd.poReport",         "title": "aibrd: Generate PO Progress Report",       "category": "aibrd" },
+      { "command": "aibrd.complianceMapper", "title": "aibrd: Map Compliance Frameworks",         "category": "aibrd" },
+      { "command": "aibrd.ingestConfluence", "title": "aibrd: Ingest from Confluence",            "category": "aibrd" },
+      { "command": "aibrd.staleDetector",    "title": "aibrd: Check Requirement Staleness",       "category": "aibrd" },
+      { "command": "aibrd.testLinkage",      "title": "aibrd: Link Requirements to Test Files",   "category": "aibrd" }
     ],
     "chatParticipants": [
       {
@@ -63,6 +55,11 @@
           "type": "number",
           "default": 6000,
           "description": "Max tokens per BRD chunk sent to LLM"
+        },
+        "aibrd.confluenceBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Default Confluence base URL (e.g. https://yourorg.atlassian.net)"
         }
       }
     }

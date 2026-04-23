@@ -1,12 +1,28 @@
 """
 aibrd CLI — personal repo usage
 
-Commands:
+Commands (core):
   aibrd init   <file>           Parse BRD, generate .aibrd/
   aibrd update <requirement>    Add PO requirement to CONTEXT.md
   aibrd tests  [--module slug]  Generate test cases
   aibrd gaps   <code-file>      Check a file for requirement coverage
   aibrd release <version>       Generate release notes from git diff
+
+Commands (batch 1 — quality & analysis):
+  aibrd validate                Validate .aibrd/ structure and cross-references
+  aibrd pr-draft                Draft PR description from git diff + requirements
+  aibrd change-impact <file>    Analyse impact of a new BRD version
+
+Commands (batch 2 — delivery):
+  aibrd sprint  [--module slug] Generate sprint tasks from CONTEXT.md
+  aibrd api-contracts [--module] Derive REST API contracts from business flows
+  aibrd po-report <version>     Plain-English PO progress report
+  aibrd compliance [--fw fw…]   Map requirements to compliance frameworks
+
+Commands (batch 3 — ingestion & traceability):
+  aibrd confluence              Ingest a Confluence page as BRD source
+  aibrd stale                   Check which requirements have stale code coverage
+  aibrd test-linkage            Map requirement IDs to test files
 """
 
 import os
@@ -24,8 +40,7 @@ console = Console()
 
 
 def _aibrd_dir() -> str:
-    cwd = Path.cwd()
-    return str(cwd / ".aibrd")
+    return str(Path.cwd() / ".aibrd")
 
 
 def _project_name() -> str:
@@ -73,7 +88,6 @@ def init(
         chunks = chunk_brd(raw_brd)
         project_name = _project_name()
 
-        # detect mode
         section_count = len([l for l in raw_brd.text.splitlines() if l.startswith("# ") or l.startswith("## ")])
         word_count = len(raw_brd.text.split())
         modular = section_count >= 5 and word_count >= 2000
@@ -164,7 +178,6 @@ def init(
 
         write_registry(aibrd_dir, registry)
 
-    # summary table
     table = Table(title="aibrd Initialization Complete")
     table.add_column("Item", style="cyan")
     table.add_column("Count", justify="right")
@@ -326,9 +339,6 @@ def gaps(
     context = open(ctx_path, encoding="utf-8").read() if os.path.exists(ctx_path) else ""
     code = open(code_file, encoding="utf-8").read()
 
-    with Progress(SpinnerColumn(), TextColumn("Analysing coverage..."), console=console) as _:
-        pass
-
     gaps_result = detect_gaps(context, f"// {code_file}\n{code}")
     report = format_gap_report(gaps_result)
     console.print(report)
@@ -368,9 +378,6 @@ def release(
     )
     prompt = f"REQUIREMENTS:\n{context[:4000]}\n\nGIT DIFF:\n{git_diff[:4000]}"
 
-    with Progress(SpinnerColumn(), TextColumn("Generating release notes..."), console=console) as _:
-        pass
-
     notes = call_llm(prompt, SYSTEM)
     id_, registry = next_id(registry, "RN")
     write_registry(aibrd_dir, registry)
@@ -379,6 +386,431 @@ def release(
     write_release(aibrd_dir, version, content)
     console.print(f"[green]✓ Release notes saved to .aibrd/releases/{version}.md[/green]")
     console.print(content)
+
+
+# ── validate ──────────────────────────────────────────────────────────────────
+
+@app.command()
+def validate():
+    """Validate .aibrd/ structure, cross-references, and integrity."""
+    from .analyzers.validator import validate_aibrd_dir, format_validation_report
+
+    aibrd_dir = _aibrd_dir()
+    result = validate_aibrd_dir(aibrd_dir)
+    report = format_validation_report(result, aibrd_dir)
+    console.print(report)
+
+    if not result.passed:
+        raise typer.Exit(1)
+
+
+# ── pr-draft ──────────────────────────────────────────────────────────────────
+
+@app.command(name="pr-draft")
+def pr_draft(
+    base: str = typer.Option("main", "--base", "-b", help="Base branch to diff against"),
+):
+    """Draft a pull request description from git diff + requirement IDs."""
+    from .llm.client import call_llm
+
+    aibrd_dir = _aibrd_dir()
+
+    try:
+        diff = subprocess.check_output(
+            ["git", "diff", f"{base}...HEAD", "--stat"],
+            cwd=str(Path.cwd()), text=True
+        )
+        log = subprocess.check_output(
+            ["git", "log", f"{base}...HEAD", "--oneline"],
+            cwd=str(Path.cwd()), text=True
+        )
+    except subprocess.CalledProcessError:
+        console.print("[red]Git diff failed. Ensure you are in a git repo with commits.[/red]")
+        raise typer.Exit(1)
+
+    ctx_path = os.path.join(aibrd_dir, "index.md")
+    if not os.path.exists(ctx_path):
+        ctx_path = os.path.join(aibrd_dir, "CONTEXT.md")
+    context = open(ctx_path, encoding="utf-8").read() if os.path.exists(ctx_path) else ""
+
+    SYSTEM = """You are a senior engineer writing a pull request description.
+Given the git diff and business requirements, write a PR description with:
+## What Changed
+(bullet list of code changes in plain English)
+## Requirements Covered
+(list requirement IDs BF-XXX, BR-XXX, AC-XXX that this PR addresses)
+## Test Coverage
+(note which test files cover the changes)
+## Notes for Reviewer
+(anything the reviewer should know — trade-offs, TODOs, edge cases)"""
+
+    prompt = f"REQUIREMENTS:\n{context[:3000]}\n\nCOMMITS:\n{log[:1000]}\n\nCHANGED FILES:\n{diff[:2000]}"
+    description = call_llm(prompt, SYSTEM)
+    console.print(description)
+
+
+# ── change-impact ─────────────────────────────────────────────────────────────
+
+@app.command(name="change-impact")
+def change_impact(
+    new_brd: str = typer.Argument(..., help="Path to updated BRD file"),
+):
+    """Analyse the impact of a new BRD version against the existing specification."""
+    from .parsers import parse_file
+    from .analyzers.change_impact import analyze_change_impact, format_impact_report
+    from .workspace.writer import write_file
+
+    aibrd_dir = _aibrd_dir()
+    ctx_path = os.path.join(aibrd_dir, "CONTEXT.md")
+    old_context = open(ctx_path, encoding="utf-8").read() if os.path.exists(ctx_path) else ""
+
+    if not os.path.exists(new_brd):
+        console.print(f"[red]File not found: {new_brd}[/red]")
+        raise typer.Exit(1)
+
+    raw = parse_file(new_brd)
+
+    with Progress(SpinnerColumn(), TextColumn("Analysing change impact..."), console=console) as _:
+        pass
+
+    impacts = analyze_change_impact(old_context, raw.text)
+    report = format_impact_report(impacts)
+    write_file(os.path.join(aibrd_dir, "change-impact-report.md"), report)
+    console.print(report)
+    console.print(f"[green]✓ Saved to .aibrd/change-impact-report.md[/green]")
+
+
+# ── sprint ────────────────────────────────────────────────────────────────────
+
+@app.command()
+def sprint(
+    module: Optional[str] = typer.Option(None, "--module", "-m", help="Module slug (omit for all)"),
+    github_issues: bool = typer.Option(False, "--github-issues", help="Output as GitHub Issues JSON"),
+):
+    """Generate sprint tasks from CONTEXT.md requirement IDs."""
+    from .registry import read_registry
+    from .generators.sprint_feed import generate_sprint_feed, format_sprint_feed, format_sprint_feed_as_github_issues
+    from .workspace.writer import write_file
+    from .models.outputs import BRDContent, BusinessFlow, BusinessRule, AcceptanceCriteria
+    import re
+
+    aibrd_dir = _aibrd_dir()
+    registry = read_registry(aibrd_dir)
+    project_name = _project_name()
+
+    def _parse(path: str, slug: str | None = None) -> BRDContent:
+        if not os.path.exists(path):
+            return BRDContent()
+        text = open(path, encoding="utf-8").read()
+        flows, rules, criteria = [], [], []
+        for m in re.finditer(r"###\s+((?:[A-Z]+-)?BF-\d+):\s*(.+)", text):
+            flows.append(BusinessFlow(id=m.group(1), name=m.group(2), description=m.group(2)))
+        for m in re.finditer(r"###\s+((?:[A-Z]+-)?BR-\d+)\n([^\n]+)", text):
+            rules.append(BusinessRule(id=m.group(1), description=m.group(2)))
+        for m in re.finditer(r"###\s+((?:[A-Z]+-)?AC-\d+)([\s\S]*?)(?=###|\n##|$)", text):
+            block = m.group(2)
+            given = (re.search(r"\*\*Given\*\*\s+(.+)", block) or re.search(r"Given (.+)", block))
+            when  = (re.search(r"\*\*When\*\*\s+(.+)",  block) or re.search(r"When (.+)",  block))
+            then  = (re.search(r"\*\*Then\*\*\s+(.+)",  block) or re.search(r"Then (.+)",  block))
+            criteria.append(AcceptanceCriteria(
+                id=m.group(1),
+                given=given.group(1) if given else "",
+                when=when.group(1) if when else "",
+                then=then.group(1) if then else "",
+            ))
+        return BRDContent(module_slug=slug, flows=flows, rules=rules, criteria=criteria)
+
+    slugs_to_run = (
+        [module] if module
+        else (list(registry.modules.keys()) if registry.mode == "modular" else [None])
+    )
+
+    all_tasks = []
+    for slug in slugs_to_run:
+        ctx_path = (
+            os.path.join(aibrd_dir, "modules", slug, "CONTEXT.md") if slug
+            else os.path.join(aibrd_dir, "CONTEXT.md")
+        )
+        content = _parse(ctx_path, slug)
+        tasks = generate_sprint_feed(content)
+        all_tasks.extend(tasks)
+
+    if github_issues:
+        output = format_sprint_feed_as_github_issues(all_tasks)
+    else:
+        output = format_sprint_feed(all_tasks, project_name)
+        write_file(os.path.join(aibrd_dir, "sprint-feed.md"), output)
+        console.print(f"[green]✓ {len(all_tasks)} tasks saved to .aibrd/sprint-feed.md[/green]")
+
+    console.print(output)
+
+
+# ── api-contracts ─────────────────────────────────────────────────────────────
+
+@app.command(name="api-contracts")
+def api_contracts(
+    module: Optional[str] = typer.Option(None, "--module", "-m", help="Module slug"),
+    fmt: str = typer.Option("markdown", "--format", "-f", help="Output format: markdown | openapi"),
+):
+    """Derive REST API contracts from business flows in CONTEXT.md."""
+    from .registry import read_registry
+    from .generators.api_contracts import (
+        derive_api_contracts, format_api_contracts_as_markdown, format_api_contracts_as_openapi
+    )
+    from .workspace.writer import write_file
+    from .models.outputs import BRDContent, BusinessFlow, FlowStep
+    import re
+
+    aibrd_dir = _aibrd_dir()
+    registry = read_registry(aibrd_dir)
+    project_name = _project_name()
+
+    def _parse(path: str, slug: str | None = None) -> BRDContent:
+        if not os.path.exists(path):
+            return BRDContent()
+        text = open(path, encoding="utf-8").read()
+        flows = []
+        for m in re.finditer(r"###\s+((?:[A-Z]+-)?BF-\d+):\s*(.+)", text):
+            flows.append(BusinessFlow(id=m.group(1), name=m.group(2), description=m.group(2)))
+        return BRDContent(module_slug=slug, flows=flows)
+
+    slug = module
+    if not slug and registry.mode == "modular":
+        slugs = list(registry.modules.keys())
+        slug = slugs[0] if len(slugs) == 1 else None
+
+    ctx_path = (
+        os.path.join(aibrd_dir, "modules", slug, "CONTEXT.md") if slug
+        else os.path.join(aibrd_dir, "CONTEXT.md")
+    )
+    content = _parse(ctx_path, slug)
+    endpoints = derive_api_contracts(content)
+
+    if fmt == "openapi":
+        output = format_api_contracts_as_openapi(endpoints, project_name, slug)
+        filename = f"{slug}-openapi.yaml" if slug else "openapi.yaml"
+    else:
+        output = format_api_contracts_as_markdown(endpoints)
+        filename = f"{slug}-api-contracts.md" if slug else "api-contracts.md"
+
+    write_file(os.path.join(aibrd_dir, filename), output)
+    console.print(output)
+    console.print(f"[green]✓ {len(endpoints)} endpoints saved to .aibrd/{filename}[/green]")
+
+
+# ── po-report ─────────────────────────────────────────────────────────────────
+
+@app.command(name="po-report")
+def po_report(
+    version: str = typer.Argument(..., help="Release version, e.g. v1.2.0"),
+    git_range: str = typer.Option("HEAD~20..HEAD", "--range", "-r", help="Git commit range"),
+):
+    """Generate a plain-English PO progress report (no requirement IDs visible)."""
+    from .registry import read_registry
+    from .generators.po_report import generate_po_report, get_git_summary
+    from .workspace.writer import write_file
+    from .models.outputs import BRDContent, BusinessFlow, BusinessRule
+    import re
+
+    aibrd_dir = _aibrd_dir()
+    registry = read_registry(aibrd_dir)
+    workspace_root = str(Path.cwd())
+
+    def _parse(path: str, slug: str | None = None) -> BRDContent:
+        if not os.path.exists(path):
+            return BRDContent()
+        text = open(path, encoding="utf-8").read()
+        flows, rules = [], []
+        for m in re.finditer(r"###\s+((?:[A-Z]+-)?BF-\d+):\s*(.+)", text):
+            flows.append(BusinessFlow(id=m.group(1), name=m.group(2), description=m.group(2)))
+        for m in re.finditer(r"###\s+((?:[A-Z]+-)?BR-\d+)\n([^\n]+)", text):
+            rules.append(BusinessRule(id=m.group(1), description=m.group(2)))
+        return BRDContent(module_slug=slug, flows=flows, rules=rules)
+
+    slugs = list(registry.modules.keys()) if registry.mode == "modular" else [None]
+    contents = []
+    for slug in slugs:
+        ctx_path = (
+            os.path.join(aibrd_dir, "modules", slug, "CONTEXT.md") if slug
+            else os.path.join(aibrd_dir, "CONTEXT.md")
+        )
+        contents.append(_parse(ctx_path, slug))
+
+    git_summary = get_git_summary(workspace_root, git_range)
+    report = generate_po_report(contents, git_summary, version)
+
+    filename = f"po-report-{version.replace('/', '-')}.md"
+    write_file(os.path.join(aibrd_dir, "releases", filename), report)
+    console.print(report)
+    console.print(f"[green]✓ Saved to .aibrd/releases/{filename}[/green]")
+
+
+# ── compliance ────────────────────────────────────────────────────────────────
+
+@app.command()
+def compliance(
+    frameworks: list[str] = typer.Option(
+        ["GDPR", "WCAG"],
+        "--framework", "--fw", "-f",
+        help="Frameworks to check (can repeat). Options: GDPR WCAG HIPAA SOX PCI-DSS ISO27001"
+    ),
+):
+    """Map requirements to compliance frameworks (GDPR, WCAG, HIPAA, SOX, PCI-DSS, ISO27001)."""
+    from .registry import read_registry
+    from .generators.compliance_mapper import map_compliance, format_compliance_map, ALL_FRAMEWORKS
+    from .workspace.writer import write_file
+    from .models.outputs import BRDContent, BusinessFlow, BusinessRule
+    import re
+
+    aibrd_dir = _aibrd_dir()
+    registry = read_registry(aibrd_dir)
+
+    # validate frameworks
+    valid = [f for f in frameworks if f in ALL_FRAMEWORKS]
+    if not valid:
+        console.print(f"[red]No valid frameworks. Choose from: {', '.join(ALL_FRAMEWORKS)}[/red]")
+        raise typer.Exit(1)
+
+    def _parse(path: str, slug: str | None = None) -> BRDContent:
+        if not os.path.exists(path):
+            return BRDContent()
+        text = open(path, encoding="utf-8").read()
+        flows, rules = [], []
+        for m in re.finditer(r"###\s+((?:[A-Z]+-)?BF-\d+):\s*(.+)", text):
+            flows.append(BusinessFlow(id=m.group(1), name=m.group(2), description=m.group(2)))
+        for m in re.finditer(r"###\s+((?:[A-Z]+-)?BR-\d+)\n([^\n]+)", text):
+            rules.append(BusinessRule(id=m.group(1), description=m.group(2)))
+        return BRDContent(module_slug=slug, flows=flows, rules=rules)
+
+    slugs = list(registry.modules.keys()) if registry.mode == "modular" else [None]
+    contents = []
+    for slug in slugs:
+        ctx_path = (
+            os.path.join(aibrd_dir, "modules", slug, "CONTEXT.md") if slug
+            else os.path.join(aibrd_dir, "CONTEXT.md")
+        )
+        contents.append(_parse(ctx_path, slug))
+
+    tags = map_compliance(contents, valid)
+    report = format_compliance_map(tags)
+    write_file(os.path.join(aibrd_dir, "compliance-map.md"), report)
+    console.print(report)
+    console.print(f"[green]✓ {len(tags)} tags saved to .aibrd/compliance-map.md[/green]")
+
+
+# ── confluence ────────────────────────────────────────────────────────────────
+
+@app.command()
+def confluence(
+    base_url: str = typer.Option(..., "--url", help="Confluence base URL, e.g. https://org.atlassian.net"),
+    space_key: str = typer.Option(..., "--space", help="Confluence space key, e.g. ENG"),
+    page_title: str = typer.Option(..., "--page", help="Page title to ingest"),
+    token: str = typer.Option(..., "--token", envvar="CONFLUENCE_TOKEN", help="API token or PAT"),
+    email: Optional[str] = typer.Option(None, "--email", help="Email for Atlassian Cloud (omit for Server/DC)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Reinitialize if .aibrd/ already exists"),
+):
+    """Ingest a Confluence page directly as the BRD source."""
+    from .parsers.confluence import ConfluenceConfig, ingest_confluence_page
+
+    cfg = ConfluenceConfig(
+        base_url=base_url, space_key=space_key, page_title=page_title,
+        token=token, email=email
+    )
+    console.print(f"[cyan]Fetching Confluence page: {page_title}…[/cyan]")
+    try:
+        raw_brd = ingest_confluence_page(cfg)
+    except Exception as e:
+        console.print(f"[red]Confluence fetch failed: {e}[/red]")
+        raise typer.Exit(1)
+
+    # Write to a temp file and call init logic
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8") as tmp:
+        tmp.write(raw_brd.text)
+        tmp_path = tmp.name
+
+    console.print(f"[cyan]Fetched {len(raw_brd.text)} chars. Running init…[/cyan]")
+    # delegate to init
+    from typer.testing import CliRunner
+    runner = CliRunner()
+    args = [tmp_path]
+    if force:
+        args.append("--force")
+    result = runner.invoke(app, ["init"] + args)
+    console.print(result.output)
+    os.unlink(tmp_path)
+
+
+# ── stale ─────────────────────────────────────────────────────────────────────
+
+@app.command()
+def stale(
+    module: Optional[str] = typer.Option(None, "--module", "-m", help="Module slug (omit for all)"),
+):
+    """Check which requirements have gone stale (no code activity in >30 days)."""
+    from .analyzers.stale_detector import detect_stale_requirements, build_staleness_report, format_staleness_report
+    from .registry import read_registry
+    from .workspace.writer import write_file
+
+    aibrd_dir = _aibrd_dir()
+    workspace_root = str(Path.cwd())
+    registry = read_registry(aibrd_dir)
+
+    slugs = (
+        [module] if module
+        else (list(registry.modules.keys()) if registry.mode == "modular" else [None])
+    )
+
+    all_items = []
+    for slug in slugs:
+        all_items.extend(detect_stale_requirements(aibrd_dir, workspace_root, slug))
+
+    from .analyzers.stale_detector import build_staleness_report
+    report = build_staleness_report(all_items)
+    formatted = format_staleness_report(report, module)
+    write_file(os.path.join(aibrd_dir, "staleness-report.md"), formatted)
+    console.print(formatted)
+
+    stale_count = report.stale_count
+    if stale_count:
+        console.print(f"[red]⚠ {stale_count} stale requirement(s) found.[/red]")
+        raise typer.Exit(1)
+    else:
+        console.print("[green]✓ All requirements are up to date.[/green]")
+
+
+# ── test-linkage ──────────────────────────────────────────────────────────────
+
+@app.command(name="test-linkage")
+def test_linkage(
+    module: Optional[str] = typer.Option(None, "--module", "-m", help="Module slug (omit for all)"),
+):
+    """Map requirement IDs to actual test files in the workspace."""
+    from .analyzers.test_linkage import link_test_files, build_test_linkage_report, format_test_linkage_report
+    from .registry import read_registry
+    from .workspace.writer import write_file
+
+    aibrd_dir = _aibrd_dir()
+    workspace_root = str(Path.cwd())
+    registry = read_registry(aibrd_dir)
+
+    slugs = (
+        [module] if module
+        else (list(registry.modules.keys()) if registry.mode == "modular" else [None])
+    )
+
+    all_links = []
+    for slug in slugs:
+        all_links.extend(link_test_files(aibrd_dir, workspace_root, slug))
+
+    report = build_test_linkage_report(all_links)
+    formatted = format_test_linkage_report(report, module)
+    write_file(os.path.join(aibrd_dir, "test-linkage-report.md"), formatted)
+    console.print(formatted)
+
+    total = len(all_links)
+    pct = round(report.covered_count / total * 100) if total else 0
+    console.print(f"\n[{'green' if pct >= 80 else 'yellow'}]{pct}% requirements covered by tests.[/{'green' if pct >= 80 else 'yellow'}]")
 
 
 if __name__ == "__main__":
