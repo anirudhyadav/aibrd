@@ -327,7 +327,7 @@ jobs:
 
 ## Multi-Team Rollout
 
-See [ROLLOUT_PLAN.md](../ROLLOUT_PLAN.md) for the phased rollout guide covering pilot team selection, org-wide deployment via internal config repo, team customization, and success metrics.
+See [ROLLOUT_PLAN.md](ROLLOUT_PLAN.md) for the phased rollout guide covering pilot team selection, org-wide deployment via internal config repo, team customization, and success metrics.
 
 ---
 
