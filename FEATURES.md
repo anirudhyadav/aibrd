@@ -107,10 +107,24 @@ jobs:
 |---|---|---|
 | Setup | Zero | 15 min |
 | LLM | Any (manual paste) | GitHub Copilot (auto) |
-| BRD extraction | ✅ via prompts | ✅ 16 commands |
-| Confluence ingestion | ❌ | ✅ |
+| BRD extraction | ✅ `extract-requirements.md` | ✅ `aibrd: Initialize from BRD` |
+| Update requirement | ✅ `update-requirement.md` | ✅ `aibrd: Update with new requirement` |
+| Validate CONTEXT.md | ✅ `validate-context.md` | ✅ `aibrd: Validate CONTEXT.md` |
+| Gap analysis | ✅ `gap-analysis.md` | ✅ `aibrd: Show Gap Report` |
+| Test case generation | ✅ `generate-test-cases.md` | ✅ `aibrd: Generate Test Cases` |
+| Sprint feed | ✅ `sprint-feed.md` | ✅ `aibrd: Generate Sprint Feed` |
+| Change impact analysis | ✅ `change-impact.md` | ✅ `aibrd: Analyse Change Impact` |
+| PR description | ✅ `pr-description.md` | ✅ `aibrd: Draft Pull Request Description` |
+| API contracts (OpenAPI) | ✅ `api-contracts.md` | ✅ `aibrd: Derive API Contracts` |
+| Release notes | ✅ `release-notes.md` | ✅ `aibrd: Generate Release Notes` |
+| PO progress report | ✅ `po-progress-report.md` | ✅ `aibrd: Generate PO Progress Report` |
+| Compliance mapping | ✅ `compliance-map.md` | ✅ `aibrd: Map Compliance Frameworks` |
+| Traceability matrix | ❌ | ✅ interactive tree view |
+| Requirement staleness | ❌ needs git log | ✅ `aibrd: Check Requirement Staleness` |
+| Test file linkage | ❌ needs repo scan | ✅ `aibrd: Link Requirements to Test Files` |
+| Confluence ingestion | ❌ needs REST API | ✅ `aibrd: Ingest from Confluence` |
+| @aibrd chat participant | ❌ | ✅ |
 | CI/CD integration | ❌ | ✅ |
-| @aibrd chat | ❌ | ✅ |
 | Works offline / air-gapped | ✅ | ❌ |
 | Modular large projects | ❌ | ✅ auto-detected |
 | API keys required | None | None |
@@ -132,17 +146,17 @@ jobs:
 
 ## Personas
 
-| Role | Option A | Option B (VS Code) |
+| Role | Option A (prompts/) | Option B (VS Code) |
 |---|---|---|
-| **Tech Lead** | Extract requirements prompt | `aibrd: Initialize from BRD` |
-| **Lead Engineer** | — | `aibrd: Update with new requirement` |
-| **Developer** | Gap analysis prompt | `@aibrd tasks` |
-| **QA / Tester** | — | `aibrd: Generate Test Cases` |
-| **Release Manager** | — | `aibrd: Generate Release Notes` |
-| **Scrum Master** | Sprint feed prompt | `aibrd: Generate Sprint Feed` |
-| **Architect** | — | `aibrd: Derive API Contracts` |
-| **Compliance Officer** | Compliance map prompt | `aibrd: Map Compliance Frameworks` |
-| **Product Owner** | — | Receives PO Progress Report |
+| **Tech Lead** | `extract-requirements.md` · `validate-context.md` | `aibrd: Initialize from BRD` |
+| **Lead Engineer** | `update-requirement.md` · `change-impact.md` | `aibrd: Update with new requirement` |
+| **Developer** | `gap-analysis.md` · `pr-description.md` | `@aibrd tasks` · `aibrd: Show Gap Report` |
+| **QA / Tester** | `generate-test-cases.md` | `aibrd: Generate Test Cases` |
+| **Release Manager** | `release-notes.md` | `aibrd: Generate Release Notes` |
+| **Scrum Master** | `sprint-feed.md` | `aibrd: Generate Sprint Feed` |
+| **Architect** | `api-contracts.md` | `aibrd: Derive API Contracts` |
+| **Compliance Officer** | `compliance-map.md` | `aibrd: Map Compliance Frameworks` |
+| **Product Owner** | `po-progress-report.md` | `aibrd: Generate PO Progress Report` |
 
 ---
 
