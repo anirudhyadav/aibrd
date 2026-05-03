@@ -1,13 +1,13 @@
 {
   "name": "aibrd",
-  "displayName": "AIBRD — BRD Layer + Judgment Layer",
-  "description": "Convert BRDs into living specs. Review every PR. Stress-test designs. Resolve deadlocks. All inside Copilot — no extra API keys.",
+  "displayName": "AIBRD — BRD to Living Specification",
+  "description": "Convert BRDs into version-controlled living specs with full traceability from requirement to shipped code. No extra API keys.",
   "version": "0.2.0",
   "publisher": "anirudhyadav",
   "license": "MIT",
   "engines": { "vscode": "^1.93.0" },
-  "categories": ["AI", "Linters", "Other"],
-  "keywords": ["aibrd", "copilot", "brd", "code review", "architecture", "ADR", "judge", "advocate", "mediator"],
+  "categories": ["AI", "Other"],
+  "keywords": ["aibrd", "copilot", "brd", "requirements", "traceability", "living spec"],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
@@ -35,39 +35,6 @@
         "name": "aibrd",
         "description": "Query your BRD — flows, rules, tasks, coverage, RTM",
         "isSticky": false
-      },
-      {
-        "id": "aibrd.judge",
-        "name": "judge",
-        "fullName": "AIBRD Judge",
-        "description": "Review code against your team's rubric. Returns APPROVE / REQUEST_CHANGES / BLOCK with severity-graded findings.",
-        "isSticky": false,
-        "commands": [
-          { "name": "review",   "description": "Review the active file or selection against the team rubric" },
-          { "name": "security", "description": "Run a security audit (OWASP Top-10 focus)" }
-        ]
-      },
-      {
-        "id": "aibrd.advocate",
-        "name": "advocate",
-        "fullName": "AIBRD Advocate",
-        "description": "Stress-test proposals before committing. Generate Architecture Decision Records.",
-        "isSticky": false,
-        "commands": [
-          { "name": "adr",   "description": "Generate an Architecture Decision Record from a proposal" },
-          { "name": "devil", "description": "Devil's Advocate — stress-test a proposal before agent handoff" }
-        ]
-      },
-      {
-        "id": "aibrd.mediator",
-        "name": "mediator",
-        "fullName": "AIBRD Mediator",
-        "description": "Resolve sprint-blocking engineering disagreements. Finds synthesis, not a winner.",
-        "isSticky": false,
-        "commands": [
-          { "name": "design", "description": "Mediate a design conflict between two engineering positions" },
-          { "name": "deps",   "description": "Resolve a dependency version conflict" }
-        ]
       }
     ],
     "views": {
