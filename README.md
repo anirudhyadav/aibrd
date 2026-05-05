@@ -40,21 +40,34 @@ aibrd/
 │   ├── change-impact.md                   ← old BRD vs new BRD delta analysis
 │   └── compliance-map.md                  ← requirements vs GDPR/WCAG/HIPAA/SOX/PCI-DSS
 │
-└── vscodebase/                            ← Option B: VS Code Extension (TypeScript)
+└── vscode-extension/                      ← Option B: VS Code Extension (TypeScript)
     ├── package.json
     ├── tsconfig.json
     └── src/
         ├── extension.ts                   ← registers all 16 commands + @aibrd participant
+        ├── __mocks__/vscode.ts            ← VS Code API mock for unit tests
         ├── chat/                          ← @aibrd Copilot Chat participant
         ├── commands/                      ← 16 VS Code commands
         ├── core/
-        │   ├── parsers/                   ← PDF, DOCX, Markdown, Confluence
+        │   ├── __tests__/                 ← chunker, generators, parsers, registry tests
+        │   ├── parsers/                   ← PDF, DOCX, Markdown, Confluence, YAML
         │   ├── extractors/                ← actors, flows, rules, AC, module detector
         │   ├── generators/                ← CONTEXT.md, tests, RTM, sprint, API, PO report
-        │   └── analyzers/                 ← gap, change impact, staleness, test linkage
-        ├── llm/                           ← vscode.lm wrapper — no API key required
-        ├── views/                         ← RTM tree view, gap report panel
-        └── workspace/                     ← workspace reader/writer/detector
+        │   ├── analyzers/                 ← gap_detector, change_impact, stale_detector, validator
+        │   ├── models/                    ← BRD, module, output type definitions
+        │   ├── registry.ts               ← stable ID management (BF/BR/AC/TC)
+        │   ├── resolver.ts               ← requirement ID lookup and relation linking
+        │   └── chunker.ts                ← token-aware document chunker
+        ├── llm/
+        │   ├── client.ts                 ← vscode.lm wrapper — no API key required
+        │   ├── context_builder.ts        ← prompt context assembly
+        │   └── pipeline.ts              ← three-stage classify → analyze → synthesize
+        ├── views/                         ← RTM tree view, gap report panel, analysis panel
+        └── workspace/
+            ├── __tests__/               ← writer unit tests
+            ├── detector.ts              ← .aibrd/ directory detection
+            ├── reader.ts                ← context and query loading
+            └── writer.ts               ← file and directory creation
 ```
 
 ---
@@ -72,7 +85,7 @@ aibrd/
 ### Option B — VS Code Extension
 
 ```bash
-cd vscodebase
+cd vscode-extension
 npm install
 # Press F5 in VS Code to launch Extension Development Host
 # Command Palette → aibrd: Initialize from BRD → select your PDF or Word file
@@ -80,7 +93,7 @@ npm install
 
 **Org-wide deployment:**
 ```bash
-cd vscodebase
+cd vscode-extension
 npm install && npm run package
 # Distribute aibrd-0.2.0.vsix via MDM or VS Code Server
 code --install-extension aibrd-0.2.0.vsix
@@ -210,6 +223,28 @@ Option A prompt output must be reviewed before committing. The LLM may misclassi
 2. Resolve all items in `ambiguity-report.md` with the business
 3. Never silently accept IDs — fix before they become load-bearing in tests and release notes
 4. The `registry.json` ID counter must never be edited manually
+
+---
+
+## Core Engineering Pattern
+
+`aibrd` and `aigap` share the same VS Code extension architecture. Features differ, the skeleton does not:
+
+| Layer | Purpose |
+|---|---|
+| `vscode-extension/src/commands/` | One file per command — thin orchestration only |
+| `vscode-extension/src/core/parsers/` | Document ingestion (PDF, DOCX, Markdown, Confluence, YAML) |
+| `vscode-extension/src/core/extractors/` | Domain entity extraction from parsed text |
+| `vscode-extension/src/core/generators/` | Artifact generation (RTM, sprint, reports) |
+| `vscode-extension/src/core/analyzers/` | Gap, staleness, change impact, validation |
+| `vscode-extension/src/core/registry.ts` | Stable ID counter — reads/writes `registry.json` |
+| `vscode-extension/src/core/resolver.ts` | ID lookup and cross-reference linking |
+| `vscode-extension/src/llm/client.ts` | Single LLM call wrapper |
+| `vscode-extension/src/llm/pipeline.ts` | Three-stage classify → analyze → synthesize |
+| `vscode-extension/src/workspace/` | Filesystem read/write/detect for `.aibrd/` |
+| `vscode-extension/src/views/` | VS Code panels and tree views |
+| `vscode-extension/src/__mocks__/` | VS Code API mocks for unit tests |
+| `vscode-extension/src/core/__tests__/` | Unit tests for core logic |
 
 ---
 
